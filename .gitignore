@@ -179,3 +179,5 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+Database/Sites/RadCalNet/BSCN/SensorToGroundComparison/LANDSAT8_OLI/Files/df.pkl
+Database/Sites/RadCalNet/BSCN/SensorToGroundComparison/LANDSAT8_OLI/Images/2017-08-30_LC08_L1TP_128032_20170830_20200903_02_T1.png

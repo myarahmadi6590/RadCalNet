@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Sites>
+    <RVUS        network="RadCalNet" lat="38.497"     lon="-115.69"    start_date="2013-03-31" slice_type="square" slice_size="1000"/>
+    <GONA        network="RadCalNet" lat="-23.6002"   lon="15.11956"   start_date="2017-07-18" slice_type="disk"   slice_size="60"/>
+    <LCFR        network="RadCalNet" lat="43.558889"  lon="4.864167"   start_date="2015-01-06" slice_type="disk"   slice_size="60"/>
+    <BSCN        network="RadCalNet" lat="40.86587"   lon="109.6155"   start_date="2017-06-25" slice_type="square" slice_size="300"/>
+</Sites>

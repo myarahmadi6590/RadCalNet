@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Sensors>
+    <LANDSAT8_OLI          portal="GEE"          version="None"          source="LANDSAT/LC08/C02/T1_TOA"           file_type="tif"/>
+    <LANDSAT9_OLI          portal="GEE"          version="None"          source="LANDSAT/LC09/C02/T1_TOA"           file_type="tif"/>
+    <SENTINEL2A_MSI        portal="GEE"          version="None"          source="COPERNICUS/S2_HARMONIZED"          file_type="tif"/>
+    <SENTINEL2B_MSI        portal="GEE"          version="None"          source="COPERNICUS/S2_HARMONIZED"          file_type="tif"/>
+    <SENTINEL2C_MSI        portal="GEE"          version="None"          source="COPERNICUS/S2_HARMONIZED"          file_type="tif"/>
+</Sensors>
