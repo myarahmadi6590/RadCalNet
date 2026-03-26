@@ -2,8 +2,7 @@ import numpy as np
 import xml.etree.ElementTree as ET
 from matplotlib.colors import ListedColormap
 from pathlib import Path
-
-from SBG.HelperFunctions.functions import get_rsr
+import re
 
 # %% Sites and Sensors Config
 
@@ -58,6 +57,13 @@ def compute_band_metrics(rsr_data):
     bandwidth = wl[idx[-1]] - wl[idx[0]]
     return center, bandwidth
 
+def get_band_key(filepath):
+    _band_pattern = re.compile(r'B(\d+)([A-Z]*)_', re.IGNORECASE)
+    name = Path(filepath).name
+    match = _band_pattern.search(name)
+    return (int(match.group(1)), match.group(2) or "") if match else (float("inf"), "")
+def get_rsr(path, suffix, key_func=get_band_key):
+    return sorted(Path(path).rglob(f"*{suffix}"), key=key_func)
 
 # %% Plot Config
 
