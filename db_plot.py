@@ -5,6 +5,8 @@ from plotly.subplots import make_subplots
 import plotly.graph_objs as go
 from collections import defaultdict
 import pandas as pd
+import numpy as np
+from matplotlib.colors import ListedColormap
 
 background_color = '#f5f5f5'
 tick_font = dict(size=20, color='black')
@@ -113,8 +115,289 @@ def polar_angle_plot(df_dct):
     )
     st.plotly_chart(fig, use_container_width=True)
 
+
+def _get_plot_band_colors(sensors_config):
+    bands, band_colors_raw = get_bands(sensors_config)
+    band_colors = {
+        band: f"rgba({int(r*255)},{int(g*255)},{int(b*255)},{a})"
+        for band, (r, g, b, a) in band_colors_raw.items()
+    }
+    return bands, band_colors
+
+def _compute_band_stats(stat_dct, bands, group_by="instrument"):
+    instruments = list(stat_dct.keys())
+    sites = list(next(iter(stat_dct.values())).keys())
+
+    if group_by == "instrument":
+        outer_items = instruments
+        inner_items = sites
+    else:
+        outer_items = sites
+        inner_items = instruments
+
+    band_stats = {}
+
+    for band in bands:
+        means_dict, stds_dict = {}, {}
+
+        for outer in outer_items:
+            stats_list = []
+
+            for inner in inner_items:
+                inst, site = (outer, inner) if group_by == "instrument" else (inner, outer)
+                band_data = stat_dct[inst][site].get(band)
+
+                if band_data is None:
+                    continue
+
+                overall = band_data["overall"]
+                stats_list.append((
+                    overall["mean_ratio"],
+                    overall["std_ratio"],
+                    overall["num_acquisitions"],
+                ))
+
+            mean, std = combine_mean_std(stats_list) if stats_list else (np.nan, np.nan)
+            means_dict[outer] = mean
+            stds_dict[outer] = std
+
+        band_stats[band] = {
+            "means": means_dict,
+            "stds": stds_dict,
+        }
+
+    return band_stats
+
+
+def _add_band_backgrounds(fig, bands, band_colors, opacity=0.25):
+    for i, band in enumerate(bands):
+        fig.add_shape(
+            type="rect",
+            x0=i - 0.5,
+            x1=i + 0.5,
+            y0=0,
+            y1=1,
+            xref="x",
+            yref="y domain",
+            fillcolor=band_colors[band],
+            opacity=opacity,
+            line=dict(width=0),
+            layer="below",
+        )
+
+
+def plot_matchup_count(stat_dct):
+    st.markdown("<h2 style='text-align: center;'>Overpass Summary</h2>", unsafe_allow_html=True)
+    instruments = list(stat_dct.keys())
+    sites = list(next(iter(stat_dct.values())).keys())
+
+    fig = go.Figure()
+
+    for site in sites:
+        counts = []
+        for inst in instruments:
+            first_band = next(iter(stat_dct[inst][site]))
+            count = stat_dct[inst][site][first_band]["overall"]["num_acquisitions"]
+            counts.append(count)
+
+        fig.add_trace(
+            go.Bar(
+                x=instruments,
+                y=counts,
+                name=site,
+                text=[site] * len(instruments),
+                textposition="outside",
+                marker=dict(
+                    color="black",
+                    line=dict(color="red", width=2),
+                ),
+                showlegend=False,
+                textfont=dict(color="red"),
+            )
+        )
+
+    fig.update_layout(
+        barmode="group",
+        height=500,
+        hovermode="closest",
+        margin=dict(t=40, b=0, r=0, l=0),
+        xaxis=dict(
+            title=dict(text="Instrument", font=axis_font),
+            tickfont=tick_font,
+            showgrid=True,
+            zeroline=True,
+            linecolor="black",
+        ),
+        yaxis=dict(
+            title=dict(text="Matchup Count", font=axis_font),
+            tickfont=tick_font,
+            showgrid=True,
+            zeroline=True,
+            linecolor="black",
+        ),
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def plot_mean_ratio_per_instrument(stat_dct, sensors_config, sensor_colors, offset_scale=0.1):
+    st.markdown("<h2 style='text-align: center;'>Intercomparison Summary</h2>", unsafe_allow_html=True)
+    instruments = list(stat_dct.keys())
+    bands, band_colors = _get_plot_band_colors(sensors_config)
+    band_stats = _compute_band_stats(stat_dct, bands, group_by="instrument")
+
+    fig = go.Figure()
+    _add_band_backgrounds(fig, bands, band_colors, opacity=0.35)
+
+    n_inst = len(instruments)
+
+    for j, inst in enumerate(instruments):
+        offset = (j - (n_inst - 1) / 2) * offset_scale
+        x_vals = [i + offset for i in range(len(bands))]
+        y_vals = [band_stats[band]["means"].get(inst, np.nan) for band in bands]
+        err_vals = [band_stats[band]["stds"].get(inst, np.nan) for band in bands]
+
+        fig.add_trace(
+            go.Scatter(
+                x=x_vals,
+                y=y_vals,
+                error_y=dict(type="data", array=err_vals, visible=True),
+                mode="markers",
+                name=inst,
+                marker=dict(
+                    size=11,
+                    color=sensor_colors.get(inst, "gray"),
+                    symbol="circle",
+                    line=dict(color="black", width=1),
+                ),
+            )
+        )
+
+    fig.add_hline(y=1, line_dash="dash", line_color="red")
+
+    fig.update_xaxes(
+        tickmode="array",
+        tickvals=list(range(len(bands))),
+        ticktext=bands,
+        title_text="Band",
+    )
+
+    fig.update_layout(
+        height=500,
+        hovermode="closest",
+        margin=dict(t=40, b=0, r=0, l=0),
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=0.95,
+            xanchor="right",
+            x=0.99,
+            groupclick="toggleitem",
+            borderwidth=1,
+            font=legend_font,
+            bgcolor="rgba(240, 240, 240, 0.5)",
+            title=dict(text="<b>Instruments</b>"),
+        ),
+        xaxis=dict(
+            title=dict(text="Band", font=axis_font),
+            tickfont=tick_font,
+            showgrid=True,
+            zeroline=True,
+            linecolor="black",
+            range=[min(x_vals)-1, max(x_vals)+1.5],
+        ),
+        yaxis=dict(
+            title=dict(text="Mean Ratio per Instrument", font=axis_font),
+            tickfont=tick_font,
+            showgrid=True,
+            zeroline=True,
+            linecolor="black",
+        ),
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def plot_mean_ratio_per_site(stat_dct, sensors_config, site_symbols, offset_scale=0.1):
+    sites = list(next(iter(stat_dct.values())).keys())
+    bands, band_colors = _get_plot_band_colors(sensors_config)
+    band_stats = _compute_band_stats(stat_dct, bands, group_by="site")
+
+    fig = go.Figure()
+    _add_band_backgrounds(fig, bands, band_colors, opacity=0.35)
+
+    n_sites = len(sites)
+
+    for j, site in enumerate(sites):
+        offset = (j - (n_sites - 1) / 2) * offset_scale
+        x_vals = [i + offset for i in range(len(bands))]
+        y_vals = [band_stats[band]["means"].get(site, np.nan) for band in bands]
+        err_vals = [band_stats[band]["stds"].get(site, np.nan) for band in bands]
+
+        fig.add_trace(
+            go.Scatter(
+                x=x_vals,
+                y=y_vals,
+                error_y=dict(type="data", array=err_vals, visible=True),
+                mode="markers",
+                name=site,
+                marker=dict(
+                    size=11,
+                    color="gray",
+                    symbol=site_symbols.get(site, "circle"),
+                    line=dict(color="black", width=1),
+                ),
+            )
+        )
+
+    fig.add_hline(y=1, line_dash="dash", line_color="red")
+
+    fig.update_xaxes(
+        tickmode="array",
+        tickvals=list(range(len(bands))),
+        ticktext=bands,
+        title_text="Band",
+    )
+
+    fig.update_layout(
+        height=500,
+        hovermode="closest",
+        margin=dict(t=40, b=0, r=0, l=0),
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=0.95,
+            xanchor="right",
+            x=0.99,
+            groupclick="toggleitem",
+            borderwidth=1,
+            font=legend_font,
+            bgcolor="rgba(240, 240, 240, 0.5)",
+            title=dict(text="<b>Sites</b>"),
+        ),
+        xaxis=dict(
+            title=dict(text="Band", font=axis_font),
+            tickfont=tick_font,
+            showgrid=True,
+            zeroline=True,
+            linecolor="black",
+            range=[min(x_vals)-1, max(x_vals)+1.5],
+
+        ),
+        yaxis=dict(
+            title=dict(text="Mean Ratio per Site", font=axis_font),
+            tickfont=tick_font,
+            showgrid=True,
+            zeroline=True,
+            linecolor="black",
+        ),
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
 def time_series_plot(sensors_config, condition, df_dct, sensor_colors, site_symbols):
-    bands = get_bands(sensors_config)
+    bands, _ = get_bands(sensors_config)
 
     st.markdown("<h2 style='text-align: center;'>Time Series</h2>", unsafe_allow_html=True)    
     col1, col2 = st.columns(2)
@@ -227,34 +510,63 @@ def time_series_plot(sensors_config, condition, df_dct, sensor_colors, site_symb
     return fig
 
 def get_bands(sensors_config):
+    cmap = create_wavelength_cmap()
     cw_by_band = defaultdict(list)
     for sensor in sensors_config.values():
         for band in sensor['bands'].values():
             cw_by_band[band['name']].append(band['cw'])
-            
-    avg_cw = {band_name: sum(cws) / len(cws) for band_name, cws in cw_by_band.items()}
-    sorted_band_names = sorted(avg_cw, key=lambda b: avg_cw[b])
-    return sorted_band_names
+    avg_cw = {band: sum(cws) / len(cws) for band, cws in cw_by_band.items()}
+    sorted_band_names = sorted(avg_cw, key=avg_cw.get)
+    band_colors = {band: get_band_color(cmap, avg_cw[band]) for band in sorted_band_names}
+    return sorted_band_names, band_colors
+
+def get_band_color(cmap, wavelength, wl_min=400, wl_max=2500):
+    x = (wavelength - wl_min) / (wl_max - wl_min)
+    x = np.clip(x, 0, 1)
+    return cmap(x)
+
+def create_wavelength_cmap(wl_min=400, wl_max=2500, step=0.1):
+    def vis_rgb(w):
+        if w < 440: r,g,b = -(w-440)/40,0,1
+        elif w < 490: r,g,b = 0,(w-440)/50,1
+        elif w < 510: r,g,b = 0,1,-(w-510)/20
+        elif w < 580: r,g,b = (w-510)/70,1,0
+        elif w < 645: r,g,b = 1,-(w-645)/65,0
+        else: r,g,b = 1,0,0
+        return tuple(c**0.8 for c in (r,g,b))
+    def wl_rgb(w):
+        if w <= 700: return vis_rgb(w)
+        if w <= 1000:
+            t=(w-700)/300; return (1-0.5*t,0.2-0.1*t,0.6+0.2*t)
+        if w <= 1700:
+            t=(w-1000)/700; return (0.2,0.7+0.1*t,0.9-0.5*t)
+        t=(w-1700)/800
+        return (0.72-0.32*t,0.46-0.06*t,0.20+0.25*t)
+    wls = np.arange(wl_min, wl_max+step, step)
+    return ListedColormap([wl_rgb(w) for w in wls], name="wavelength_cmap")
+
+def combine_mean_std(stats_list):
+    if len(stats_list) == 1:
+        return stats_list[0][0], stats_list[0][1]
+    
+    stats_list = [
+        (float(m), float(s), int(n))
+        for m, s, n in stats_list
+        if n > 0 and not (np.isnan(m) or np.isnan(s) or np.isnan(n))
+    ]
+    if not stats_list:
+        return np.nan, np.nan
+    total_count = sum(n for _, _, n in stats_list)
+    mean = sum(m * n for m, _, n in stats_list) / total_count
+    pooled_var = (
+        sum((n - 1) * s ** 2 for _, s, n in stats_list) +
+        sum(n * (m - mean) ** 2 for m, _, n in stats_list)
+    ) / (total_count - 1)
+    return mean, np.sqrt(pooled_var)
 
 def get_plot_style(df_dct):
-    """
-    Build Streamlit controls for sensor colors and site symbols.
-
-    Returns
-    -------
-    sensor_colors : dict
-        {sensor: color_hex}
-    site_symbols : dict
-        {site: plotly_marker_symbol}
-    """
     sensors = list(df_dct.keys())
-    sites = sorted(
-        {
-            site
-            for _, site_dct in df_dct.items()
-            for site in site_dct.keys()
-        }
-    )
+    sites = sorted({s for d in df_dct.values() for s in d})
 
     default_colors = [
         "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728",
@@ -262,46 +574,51 @@ def get_plot_style(df_dct):
         "#bcbd22", "#17becf"
     ]
 
-    marker_symbol_options = [
-        "circle", "square", "diamond", "cross", "x",
-        "triangle-up", "triangle-down", "triangle-left", "triangle-right",
-        "pentagon", "hexagon", "star", "hourglass", "bowtie"
-    ]
-
-    sensor_color_defaults = {
-        sensor: default_colors[i % len(default_colors)]
-        for i, sensor in enumerate(sensors)
+    # Map symbols → visual preview
+    symbol_map = {
+        "circle": "●",
+        "square": "■",
+        "diamond": "◆",
+        "cross": "✚",
+        "x": "✖",
+        "triangle-up": "▲",
+        "triangle-down": "▼",
+        "triangle-left": "◀",
+        "triangle-right": "▶",
+        "pentagon": "⬟",
+        "hexagon": "⬢",
+        "star": "★",
+        "hourglass": "⌛",
+        "bowtie": "⋈",
     }
 
-    site_symbol_defaults = {
-        site: marker_symbol_options[i % len(marker_symbol_options)]
-        for i, site in enumerate(sites)
-    }
+    st.markdown("<h2 style='text-align: center;'>Plot Style</h2>", unsafe_allow_html=True)
 
-    st.markdown("### Plot style")
-
-    st.markdown("#### Instrument colors")
     sensor_colors = {}
-    color_cols = st.columns(min(8, max(1, len(sensors))))
-    for i, sensor in enumerate(sensors):
-        with color_cols[i % len(color_cols)]:
-            sensor_colors[sensor] = st.color_picker(
-                f"{sensor}",
-                value=sensor_color_defaults[sensor],
-                key=f"color_{sensor}"
+    cols = st.columns(min(6, len(sensors)))
+
+    for i, s in enumerate(sensors):
+        with cols[i % len(cols)]:
+            sensor_colors[s] = st.color_picker(
+                s,
+                default_colors[i % len(default_colors)],
+                key=f"color_{s}"
             )
 
-    st.markdown("#### Site marker symbols")
     site_symbols = {}
-    symbol_cols = st.columns(min(8, max(1, len(sites))))
+    cols = st.columns(min(6, len(sites)))
+    symbol_keys = list(symbol_map.keys())
+    symbol_labels = list(symbol_map.values())
+
     for i, site in enumerate(sites):
-        with symbol_cols[i % len(symbol_cols)]:
-            default_idx = marker_symbol_options.index(site_symbol_defaults[site])
-            site_symbols[site] = st.selectbox(
-                f"{site}",
-                marker_symbol_options,
-                index=default_idx,
+        with cols[i % len(cols)]:
+            choice = st.selectbox(
+                site,
+                symbol_labels,
+                index=i % len(symbol_labels),
                 key=f"symbol_{site}"
             )
+            # Map back to Plotly symbol key
+            site_symbols[site] = symbol_keys[symbol_labels.index(choice)]
 
     return sensor_colors, site_symbols

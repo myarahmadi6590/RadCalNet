@@ -4,12 +4,12 @@ import datetime
 def filter_condition(sites_config, sensors_config):
     st.header("Plot Settings")
     overall_condition = {"start_date": str(st.date_input("Start Date", value=datetime.date(2013, 1, 1))),
-                   "end_date": str(st.date_input("End Date", value=datetime.date.today())),
-                   "time_diff": st.number_input("Max Time Difference (s)", value=1800, step=100),
-                   "VZA": st.number_input("Sensor View Angle Threshold", value=90),
-                   "sites": sorted(st.multiselect("Select Sites", list(sites_config.keys()), default=["RVUS", "GONA", "LCFR", "BSCN"])),
-                   "sensors": sorted(st.multiselect("Select sensors", list(sensors_config.keys()), default=["LANDSAT8_OLI", "LANDSAT9_OLI", "SENTINEL2A_MSI", "SENTINEL2B_MSI", "SENTINEL2C_MSI"]))
-                   }
+                         "end_date": str(st.date_input("End Date", value=datetime.date.today())),
+                         "time_diff": st.number_input("Max Time Difference (s)", value=1800, step=100),
+                         "VZA": st.number_input("Sensor View Angle Threshold", value=90),
+                         "sites": sorted(st.multiselect("Select Sites", list(sites_config.keys()), default=["RVUS", "GONA", "LCFR", "BSCN"])),
+                         "sensors": sorted(st.multiselect("Select sensors", list(sensors_config.keys()), default=["LANDSAT8_OLI", "LANDSAT9_OLI", "SENTINEL2A_MSI", "SENTINEL2B_MSI", "SENTINEL2C_MSI"])),
+                         "remove_outliers": st.checkbox("Remove Outliers", value=False)}
     
     st.subheader("Site Conditions")
     st.markdown("Define acceptable conditions **at the site location** (%).")
