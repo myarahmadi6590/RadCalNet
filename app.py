@@ -4,12 +4,15 @@ warnings.filterwarnings("ignore")
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'
 sys.path.insert(0, "/home/myarahma")
 
+from get_config      import get_config
+from db_authenticate import check_password
+from db_setup        import setup_page
+from db_filter       import filter_condition
+from db_functions    import get_dataframes, excel_save
+from db_plot         import show_image, get_plot_style, polar_angle_plot, plot_matchup_count, plot_mean_ratio_per_instrument, plot_mean_ratio_per_site, time_series_plot
 
-from get_config   import get_config
-from db_setup     import setup_page
-from db_filter    import filter_condition
-from db_functions import get_dataframes, excel_save
-from db_plot      import show_image, get_plot_style, polar_angle_plot, plot_matchup_count, plot_mean_ratio_per_instrument, plot_mean_ratio_per_site, time_series_plot
+if not check_password():
+    st.stop()
 
 sites_config, sensors_config = get_config()
 setup_page()
