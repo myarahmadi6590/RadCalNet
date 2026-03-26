@@ -29,92 +29,127 @@ def show_image (sites_config, sensors_config, condition, df_dct, mode = 'SensorT
     image = Image.open(img_path)
     st.image(image, caption=f'{sensor}', use_container_width=True)
 
-def polar_angle_plot(df_dct):
+def polar_angle_plot(df_dct, sensor_colors):
     st.markdown("<h2 style='text-align: center;'>View and Sun Angles</h2>", unsafe_allow_html=True)
+
     sensors = list(df_dct.keys())
     num_sensors = len(sensors)
-    num_cols = 2
-    num_rows = (num_sensors + 1) // num_cols  # round up
+    num_cols = 3
+    num_rows = (num_sensors + num_cols - 1) // num_cols
 
     fig = make_subplots(
-        rows=num_rows, cols=num_cols,
+        rows=num_rows,
+        cols=num_cols,
         specs=[[{'type': 'polar'}] * num_cols for _ in range(num_rows)],
         subplot_titles=sensors,
-        horizontal_spacing=0.05,
-        vertical_spacing=0.1
+        horizontal_spacing=0.08,
+        vertical_spacing=0.08
     )
 
-    for idx, inst in enumerate(sensors):
+    def hex_to_rgba(hex_color, alpha=0.35):
+        hex_color = hex_color.lstrip("#")
+        if len(hex_color) != 6:
+            return f"rgba(200,200,200,{alpha})"
+        r = int(hex_color[0:2], 16)
+        g = int(hex_color[2:4], 16)
+        b = int(hex_color[4:6], 16)
+        return f"rgba({r},{g},{b},{alpha})"
+
+    for idx, sensor in enumerate(sensors):
         row = idx // num_cols + 1
         col = idx % num_cols + 1
+
         vza, vaa, sza, saa = [], [], [], []
-        for site_df in df_dct[inst].values():
+        for site_df in df_dct[sensor].values():
             if not site_df.empty:
-                vza.extend(site_df.get('VZA', []))
-                vaa.extend(site_df.get('VAA', []))
-                sza.extend(site_df.get('SZA', []))
-                saa.extend(site_df.get('SAA', []))
+                vza.extend(site_df.get("VZA", []))
+                vaa.extend(site_df.get("VAA", []))
+                sza.extend(site_df.get("SZA", []))
+                saa.extend(site_df.get("SAA", []))
 
-        # View angle (blue)
-        fig.add_trace(go.Scatterpolar(
-            r=vza,
-            theta=vaa,
-            mode='markers',
-            marker=dict(color='blue', size=5),
-            showlegend=(False),
-            name="View Angles"
-        ), row=row, col=col)
+        sensor_bg = hex_to_rgba(sensor_colors.get(sensor, "#cccccc"))
 
-        # Sun angle (red)
-        fig.add_trace(go.Scatterpolar(
-            r=sza,
-            theta=saa,
-            mode='markers',
-            marker=dict(color='red', size=5),
-            showlegend=(False),
-            name="Sun Angles"
-        ), row=row, col=col)
+        fig.add_trace(
+            go.Scatterpolar(
+                r=vza,
+                theta=vaa,
+                mode="markers",
+                marker=dict(color="blue", size=5, opacity=0.85),
+                name="View Angles",
+                legendgroup="view_angles",
+                showlegend=(idx == 0)
+            ),
+            row=row,
+            col=col
+        )
+
+        fig.add_trace(
+            go.Scatterpolar(
+                r=sza,
+                theta=saa,
+                mode="markers",
+                marker=dict(color="#b8860b", size=5, opacity=0.9),
+                name="Sun Angles",
+                legendgroup="sun_angles",
+                showlegend=(idx == 0)
+            ),
+            row=row,
+            col=col
+        )
 
         fig.update_polars(
             dict(
-                bgcolor=background_color,
+                bgcolor=sensor_bg,
                 radialaxis=dict(
                     range=[0, 80],
-                    showline=True,
-                    linecolor='black',
-                    gridcolor='lightgray',
-                    tickfont=tick_font
+                    tickvals=[0, 20, 40, 60, 80],
+                    tickfont=dict(size=10),
+                    gridcolor="#bfbfbf",
+                    gridwidth=1.5,
+                    linecolor="#666",
+                    linewidth=1.2,
+                    showline=True
                 ),
                 angularaxis=dict(
                     direction="clockwise",
                     rotation=90,
-                    linecolor='black',
-                    gridcolor='lightgray',
-                    tickfont=tick_font
+                    tickfont=dict(size=11),
+                    gridcolor="#bfbfbf",
+                    gridwidth=1.5,
+                    linecolor="#666",
+                    linewidth=1.2,
+                    showline=True
                 )
             ),
             row=row,
             col=col
         )
 
+    fig.update_annotations(
+        font=dict(size=14),
+        yshift=10
+    )
+
     fig.update_layout(
         height=300 * num_rows,
-        margin=dict(t=30, b=30, r=30, l=30),
+        margin=dict(t=80, b=30, r=20, l=20),
         paper_bgcolor=background_color,
         plot_bgcolor=background_color,
-        font=axis_font,
+        font=dict(size=12),
         legend=dict(
             orientation="h",
-            yanchor="bottom",
-            y=-0.1,
-            xanchor="center",
             x=0.5,
-            bgcolor='rgba(240, 240, 240, 0.5)',
+            y=1.08,
+            xanchor="center",
+            yanchor="bottom",
+            bgcolor="rgba(255,255,255,0.7)",
+            bordercolor="lightgray",
+            borderwidth=1,
             font=legend_font
         )
     )
-    st.plotly_chart(fig, use_container_width=True)
 
+    st.plotly_chart(fig, use_container_width=True)
 
 def _get_plot_band_colors(sensors_config):
     bands, band_colors_raw = get_bands(sensors_config)
@@ -186,33 +221,37 @@ def _add_band_backgrounds(fig, bands, band_colors, opacity=0.25):
         )
 
 
-def plot_matchup_count(stat_dct):
-    st.markdown("<h2 style='text-align: center;'>Overpass Summary</h2>", unsafe_allow_html=True)
-    instruments = list(stat_dct.keys())
+def plot_matchup_count(stat_dct, sensor_colors):
+    st.markdown("<h2 style='text-align: center;'>Overpass Matchup Summary</h2>", unsafe_allow_html=True)
+
+    sensors = list(stat_dct.keys())
     sites = list(next(iter(stat_dct.values())).keys())
 
     fig = go.Figure()
 
     for site in sites:
         counts = []
-        for inst in instruments:
-            first_band = next(iter(stat_dct[inst][site]))
-            count = stat_dct[inst][site][first_band]["overall"]["num_acquisitions"]
+        for sensor in sensors:
+            first_band = next(iter(stat_dct[sensor][site]))
+            count = stat_dct[sensor][site][first_band]["overall"]["num_acquisitions"]
             counts.append(count)
+
+        # Assign colors per sensor
+        color_list = [sensor_colors.get(sensor, "gray") for sensor in sensors]
 
         fig.add_trace(
             go.Bar(
-                x=instruments,
+                x=sensors,
                 y=counts,
                 name=site,
-                text=[site] * len(instruments),
+                text=[site] * len(sensors),
                 textposition="outside",
                 marker=dict(
-                    color="black",
-                    line=dict(color="red", width=2),
+                    color=color_list,
+                    line=dict(color='black', width=2),
                 ),
                 showlegend=False,
-                textfont=dict(color="red"),
+                textfont=dict(color='black'),
             )
         )
 
