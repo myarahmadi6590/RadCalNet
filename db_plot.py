@@ -1,17 +1,40 @@
 import streamlit as st
-from pathlib import Path
-from PIL import Image
 from plotly.subplots import make_subplots
 import plotly.graph_objs as go
 from collections import defaultdict
 import pandas as pd
 import numpy as np
 from matplotlib.colors import ListedColormap
+from pathlib import Path
+from PIL import Image
 
 background_color = '#f5f5f5'
 tick_font = dict(size=20, color='black')
 axis_font = dict(size=30, color='black')
 legend_font = dict(size=16, color='black')
+
+# Remove Plotly's screenshot / save-image button
+PLOTLY_CONFIG = {
+    "displaylogo": False,
+    "modeBarButtonsToRemove": ["toImage"],
+}
+
+def add_watermark(fig, text="PREVIEW"):
+    fig.add_annotation(
+        text=text,
+        x=0.5,
+        y=0.5,
+        xref="paper",
+        yref="paper",
+        showarrow=False,
+        textangle=-35,
+        font=dict(
+            size=120,
+            color="rgba(80,80,80,0.35)",
+            family="Arial Black"
+        ),
+        align="center",
+    )
 
 def show_image (sites_config, sensors_config, condition, df_dct, mode = 'SensorToGroundComparison'): 
     base_dir = Path(__file__).resolve().parent / "Database" / "Sites" 
@@ -148,8 +171,9 @@ def polar_angle_plot(df_dct, sensor_colors):
             font=legend_font
         )
     )
+    add_watermark(fig)
+    st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
 
-    st.plotly_chart(fig, use_container_width=True)
 
 def _get_plot_band_colors(sensors_config):
     bands, band_colors_raw = get_bands(sensors_config)
@@ -158,6 +182,7 @@ def _get_plot_band_colors(sensors_config):
         for band, (r, g, b, a) in band_colors_raw.items()
     }
     return bands, band_colors
+
 
 def _compute_band_stats(stat_dct, bands, group_by="instrument"):
     instruments = list(stat_dct.keys())
@@ -236,7 +261,6 @@ def plot_matchup_count(stat_dct, sensor_colors):
             count = stat_dct[sensor][site][first_band]["overall"]["num_acquisitions"]
             counts.append(count)
 
-        # Assign colors per sensor
         color_list = [sensor_colors.get(sensor, "gray") for sensor in sensors]
 
         fig.add_trace(
@@ -275,8 +299,8 @@ def plot_matchup_count(stat_dct, sensor_colors):
             linecolor="black",
         ),
     )
-
-    st.plotly_chart(fig, use_container_width=True)
+    add_watermark(fig)
+    st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
 
 
 def plot_mean_ratio_per_instrument(stat_dct, sensors_config, sensor_colors, offset_scale=0.1):
@@ -343,7 +367,7 @@ def plot_mean_ratio_per_instrument(stat_dct, sensors_config, sensor_colors, offs
             showgrid=True,
             zeroline=True,
             linecolor="black",
-            range=[min(x_vals)-1, max(x_vals)+1.5],
+            range=[min(x_vals) - 1, max(x_vals) + 1.5],
         ),
         yaxis=dict(
             title=dict(text="Mean Ratio per Instrument", font=axis_font),
@@ -353,8 +377,8 @@ def plot_mean_ratio_per_instrument(stat_dct, sensors_config, sensor_colors, offs
             linecolor="black",
         ),
     )
-
-    st.plotly_chart(fig, use_container_width=True)
+    add_watermark(fig)
+    st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
 
 
 def plot_mean_ratio_per_site(stat_dct, sensors_config, site_symbols, offset_scale=0.1):
@@ -420,8 +444,7 @@ def plot_mean_ratio_per_site(stat_dct, sensors_config, site_symbols, offset_scal
             showgrid=True,
             zeroline=True,
             linecolor="black",
-            range=[min(x_vals)-1, max(x_vals)+1.5],
-
+            range=[min(x_vals) - 1, max(x_vals) + 1.5],
         ),
         yaxis=dict(
             title=dict(text="Mean Ratio per Site", font=axis_font),
@@ -431,18 +454,20 @@ def plot_mean_ratio_per_site(stat_dct, sensors_config, site_symbols, offset_scal
             linecolor="black",
         ),
     )
-
-    st.plotly_chart(fig, use_container_width=True)
+    add_watermark(fig)
+    st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
 
 
 def time_series_plot(sensors_config, condition, df_dct, sensor_colors, site_symbols):
     bands, _ = get_bands(sensors_config)
 
-    st.markdown("<h2 style='text-align: center;'>Time Series</h2>", unsafe_allow_html=True)    
+    st.markdown("<h2 style='text-align: center;'>Time Series</h2>", unsafe_allow_html=True)
     col1, col2 = st.columns(2)
-    with col1: metric = st.selectbox("Select the metric", ["ratio", "sens_refl", "rcn_refl"], index=0)
-    with col2: band = st.selectbox("Select the band", bands, index=0)
-        
+    with col1:
+        metric = st.selectbox("Select the metric", ["ratio", "sens_refl", "rcn_refl"], index=0)
+    with col2:
+        band = st.selectbox("Select the band", bands, index=0)
+
     fig = go.Figure()
 
     for sensor, site_dct in df_dct.items():
@@ -456,7 +481,8 @@ def time_series_plot(sensors_config, condition, df_dct, sensor_colors, site_symb
                 None
             )
 
-            if not label: continue
+            if not label:
+                continue
 
             fig.add_trace(go.Scatter(
                 x=df['date'],
@@ -478,18 +504,18 @@ def time_series_plot(sensors_config, condition, df_dct, sensor_colors, site_symb
                     'P', 'T', 'WV', 'O3', 'AOD', 'Ang', 'VZA'
                 ]],
                 hovertemplate=(
-                    "<b>Date:</b> %{x|%Y-%m-%d}<br>" +
-                    "<b>ID:</b> %{customdata[0]}<br>" +
-                    "<b>Sensor Reflectance:</b> %{customdata[1]:.4f}<br>" +
-                    "<b>RCN Reflectance:</b> %{customdata[2]:.4f}<br>" +
-                    "<b>Ratio:</b> %{customdata[3]:.4f}<br>" +
-                    "<b>P:</b> %{customdata[4]:.2f}<br>" +
-                    "<b>T:</b> %{customdata[5]:.2f}<br>" +
-                    "<b>WV:</b> %{customdata[6]:.2f}<br>" +
-                    "<b>O₃:</b> %{customdata[7]:.2f}<br>" +
-                    "<b>AOD:</b> %{customdata[8]:.2f}<br>" +
-                    "<b>Ångström:</b> %{customdata[9]:.2f}<br>" +
-                    "<b>View Angle:</b> %{customdata[10]:.2f}<br>"
+                    "<b>Date:</b> %{x|%Y-%m-%d}<br>"
+                    + "<b>ID:</b> %{customdata[0]}<br>"
+                    + "<b>Sensor Reflectance:</b> %{customdata[1]:.4f}<br>"
+                    + "<b>RCN Reflectance:</b> %{customdata[2]:.4f}<br>"
+                    + "<b>Ratio:</b> %{customdata[3]:.4f}<br>"
+                    + "<b>P:</b> %{customdata[4]:.2f}<br>"
+                    + "<b>T:</b> %{customdata[5]:.2f}<br>"
+                    + "<b>WV:</b> %{customdata[6]:.2f}<br>"
+                    + "<b>O₃:</b> %{customdata[7]:.2f}<br>"
+                    + "<b>AOD:</b> %{customdata[8]:.2f}<br>"
+                    + "<b>Ångström:</b> %{customdata[9]:.2f}<br>"
+                    + "<b>View Angle:</b> %{customdata[10]:.2f}<br>"
                 ),
                 legendgroup=f"sensor_{sensor}",
                 showlegend=True
@@ -502,7 +528,7 @@ def time_series_plot(sensors_config, condition, df_dct, sensor_colors, site_symb
             y0=1, y1=1, yref='y',
             line=dict(color='red', dash='dash')
         )
-    
+
     all_dates = [df['date'] for site_dct in df_dct.values() for df in site_dct.values()]
     all_dates = pd.concat(all_dates)
     all_dates = pd.to_datetime(all_dates)
@@ -510,7 +536,7 @@ def time_series_plot(sensors_config, condition, df_dct, sensor_colors, site_symb
     max_date = all_dates.max()
     x_min_extended = min_date - pd.DateOffset(months=3)
     x_max_extended = max_date + pd.DateOffset(months=15)
-    
+
     fig.update_layout(
         xaxis=dict(
             title=dict(text='Date', font=axis_font),
@@ -544,9 +570,10 @@ def time_series_plot(sensors_config, condition, df_dct, sensor_colors, site_symb
         ),
         plot_bgcolor=background_color,
     )
-
-    st.plotly_chart(fig, use_container_width=True)
+    add_watermark(fig)
+    st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
     return fig
+
 
 def get_bands(sensors_config):
     cmap = create_wavelength_cmap()
@@ -559,35 +586,49 @@ def get_bands(sensors_config):
     band_colors = {band: get_band_color(cmap, avg_cw[band]) for band in sorted_band_names}
     return sorted_band_names, band_colors
 
+
 def get_band_color(cmap, wavelength, wl_min=400, wl_max=2500):
     x = (wavelength - wl_min) / (wl_max - wl_min)
     x = np.clip(x, 0, 1)
     return cmap(x)
 
+
 def create_wavelength_cmap(wl_min=400, wl_max=2500, step=0.1):
     def vis_rgb(w):
-        if w < 440: r,g,b = -(w-440)/40,0,1
-        elif w < 490: r,g,b = 0,(w-440)/50,1
-        elif w < 510: r,g,b = 0,1,-(w-510)/20
-        elif w < 580: r,g,b = (w-510)/70,1,0
-        elif w < 645: r,g,b = 1,-(w-645)/65,0
-        else: r,g,b = 1,0,0
-        return tuple(c**0.8 for c in (r,g,b))
+        if w < 440:
+            r, g, b = -(w - 440) / 40, 0, 1
+        elif w < 490:
+            r, g, b = 0, (w - 440) / 50, 1
+        elif w < 510:
+            r, g, b = 0, 1, -(w - 510) / 20
+        elif w < 580:
+            r, g, b = (w - 510) / 70, 1, 0
+        elif w < 645:
+            r, g, b = 1, -(w - 645) / 65, 0
+        else:
+            r, g, b = 1, 0, 0
+        return tuple(c**0.8 for c in (r, g, b))
+
     def wl_rgb(w):
-        if w <= 700: return vis_rgb(w)
+        if w <= 700:
+            return vis_rgb(w)
         if w <= 1000:
-            t=(w-700)/300; return (1-0.5*t,0.2-0.1*t,0.6+0.2*t)
+            t = (w - 700) / 300
+            return (1 - 0.5 * t, 0.2 - 0.1 * t, 0.6 + 0.2 * t)
         if w <= 1700:
-            t=(w-1000)/700; return (0.2,0.7+0.1*t,0.9-0.5*t)
-        t=(w-1700)/800
-        return (0.72-0.32*t,0.46-0.06*t,0.20+0.25*t)
-    wls = np.arange(wl_min, wl_max+step, step)
+            t = (w - 1000) / 700
+            return (0.2, 0.7 + 0.1 * t, 0.9 - 0.5 * t)
+        t = (w - 1700) / 800
+        return (0.72 - 0.32 * t, 0.46 - 0.06 * t, 0.20 + 0.25 * t)
+
+    wls = np.arange(wl_min, wl_max + step, step)
     return ListedColormap([wl_rgb(w) for w in wls], name="wavelength_cmap")
+
 
 def combine_mean_std(stats_list):
     if len(stats_list) == 1:
         return stats_list[0][0], stats_list[0][1]
-    
+
     stats_list = [
         (float(m), float(s), int(n))
         for m, s, n in stats_list
@@ -595,13 +636,15 @@ def combine_mean_std(stats_list):
     ]
     if not stats_list:
         return np.nan, np.nan
+
     total_count = sum(n for _, _, n in stats_list)
     mean = sum(m * n for m, _, n in stats_list) / total_count
     pooled_var = (
-        sum((n - 1) * s ** 2 for _, s, n in stats_list) +
-        sum(n * (m - mean) ** 2 for m, _, n in stats_list)
+        sum((n - 1) * s**2 for _, s, n in stats_list)
+        + sum(n * (m - mean)**2 for m, _, n in stats_list)
     ) / (total_count - 1)
     return mean, np.sqrt(pooled_var)
+
 
 def get_plot_style(df_dct):
     sensors = list(df_dct.keys())
@@ -613,7 +656,6 @@ def get_plot_style(df_dct):
         "#bcbd22", "#17becf"
     ]
 
-    # Map symbols → visual preview
     symbol_map = {
         "circle": "●",
         "square": "■",
@@ -657,7 +699,6 @@ def get_plot_style(df_dct):
                 index=i % len(symbol_labels),
                 key=f"symbol_{site}"
             )
-            # Map back to Plotly symbol key
             site_symbols[site] = symbol_keys[symbol_labels.index(choice)]
 
     return sensor_colors, site_symbols
