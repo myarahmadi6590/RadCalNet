@@ -19,7 +19,7 @@ PLOTLY_CONFIG = {
     "modeBarButtonsToRemove": ["toImage"],
 }
 
-def add_watermark(fig, text="PREVIEW"):
+def add_watermark(fig, text=""):
     fig.add_annotation(
         text=text,
         x=0.5,
@@ -36,7 +36,7 @@ def add_watermark(fig, text="PREVIEW"):
         align="center",
     )
 
-def show_image (sites_config, sensors_config, condition, df_dct, mode = 'SensorToGroundComparison'): 
+def show_image (sites_config, condition, df_dct, mode = 'SensorToGroundComparison'): 
     base_dir = Path(__file__).resolve().parent / "Database" / "Sites" 
     st.markdown("<h2 style='text-align: center;'>Observation Details</h2>", unsafe_allow_html=True)
     sensor = st.selectbox("Select Sensor", list(df_dct.keys()))
@@ -64,9 +64,8 @@ def polar_angle_plot(df_dct, sensor_colors):
         rows=num_rows,
         cols=num_cols,
         specs=[[{'type': 'polar'}] * num_cols for _ in range(num_rows)],
-        subplot_titles=sensors,
         horizontal_spacing=0.08,
-        vertical_spacing=0.08
+        vertical_spacing=0.12
     )
 
     def hex_to_rgba(hex_color, alpha=0.35):
@@ -148,21 +147,31 @@ def polar_angle_plot(df_dct, sensor_colors):
             col=col
         )
 
-    fig.update_annotations(
-        font=dict(size=14),
-        yshift=10
-    )
+        # Add sensor label below each subplot
+        fig.add_annotation(
+            text=sensor,
+            x=(col - 0.5) / num_cols,
+            y=1 - (row / num_rows) - 0.1,
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+            font=dict(size=14),
+            xanchor="center",
+            yanchor="top"
+        )
+        
+        
 
     fig.update_layout(
-        height=300 * num_rows,
-        margin=dict(t=80, b=30, r=20, l=20),
+        height=320 * num_rows,
+        margin=dict(t=80, b=60, r=20, l=20),
         paper_bgcolor=background_color,
         plot_bgcolor=background_color,
         font=dict(size=12),
         legend=dict(
             orientation="h",
             x=0.5,
-            y=1.08,
+            y=1.15,
             xanchor="center",
             yanchor="bottom",
             bgcolor="rgba(255,255,255,0.7)",
@@ -171,6 +180,7 @@ def polar_angle_plot(df_dct, sensor_colors):
             font=legend_font
         )
     )
+
     add_watermark(fig)
     st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
 
@@ -304,6 +314,7 @@ def plot_matchup_count(stat_dct, sensor_colors):
 
 
 def plot_mean_ratio_per_instrument(stat_dct, sensors_config, sensor_colors, offset_scale=0.1):
+    sensors_config = {k: v for k, v in sensors_config.items() if k in stat_dct}
     st.markdown("<h2 style='text-align: center;'>Intercomparison Summary</h2>", unsafe_allow_html=True)
     instruments = list(stat_dct.keys())
     bands, band_colors = _get_plot_band_colors(sensors_config)
@@ -382,6 +393,7 @@ def plot_mean_ratio_per_instrument(stat_dct, sensors_config, sensor_colors, offs
 
 
 def plot_mean_ratio_per_site(stat_dct, sensors_config, site_symbols, offset_scale=0.1):
+    sensors_config = {k: v for k, v in sensors_config.items() if k in stat_dct}
     sites = list(next(iter(stat_dct.values())).keys())
     bands, band_colors = _get_plot_band_colors(sensors_config)
     band_stats = _compute_band_stats(stat_dct, bands, group_by="site")
@@ -459,6 +471,7 @@ def plot_mean_ratio_per_site(stat_dct, sensors_config, site_symbols, offset_scal
 
 
 def time_series_plot(sensors_config, condition, df_dct, sensor_colors, site_symbols):
+    sensors_config = {k: v for k, v in sensors_config.items() if k in df_dct}
     bands, _ = get_bands(sensors_config)
 
     st.markdown("<h2 style='text-align: center;'>Time Series</h2>", unsafe_allow_html=True)
@@ -572,8 +585,219 @@ def time_series_plot(sensors_config, condition, df_dct, sensor_colors, site_symb
     )
     add_watermark(fig)
     st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
-    return fig
+    return
 
+def average_plot (sensors_config, condition, stat_dct, sensor_colors):
+    sensors_config = {k: v for k, v in sensors_config.items() if k in stat_dct}
+    bands, _ = get_bands(sensors_config)
+    st.markdown("<h2 style='text-align: center;'>Temporal Average Ratio Comparison</h2>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        time_metric = st.selectbox(
+            "Select the timestep",
+            ["yearly", "monthly"],
+            index=0,
+            key="avg_time_metric"
+        )
+    
+    with col2:
+        site_metric = st.selectbox(
+            "Select the site",
+            ["combined sites"] + condition["sites"],
+            index=0,
+            key="avg_site_metric"
+        )
+    
+    with col3:
+        band = st.selectbox(
+            "Select the band",
+            bands,
+            index=0,
+            key="avg_band"
+        )
+    stat_dct = add_combined_sites(band, stat_dct)
+    fig = go.Figure()
+    for sensor in condition["sensors"]:
+        try:
+            df = stat_dct[sensor][site_metric][band][time_metric]
+            if time_metric == "yearly": x = df['year']
+            else:x = df['month'].dt.to_timestamp()
+    
+            fig.add_trace(go.Scatter(
+                x=x,
+                y=df['mean'],
+                mode='lines+markers',
+                name=f'{sensor}       ',
+                marker=dict(
+                    size=15,
+                    color=sensor_colors.get(sensor, "#1f77b4"),
+                    line=dict(color='gold', width=1)
+                ),
+                line=dict(width=3),
+                error_y=dict(
+                    type='data',
+                    array=df['std'],
+                    visible=True)))
+        except: continue
+    fig.update_layout(
+        xaxis=dict(
+            title=dict(text="Year" if time_metric == "yearly" else "Month", font=axis_font),
+            tickfont=tick_font,
+            showgrid=True,
+            zeroline=True,
+            linecolor='black',
+        ),
+        yaxis=dict(
+            title=dict(text='Average Ratio', font=axis_font),
+            tickfont=tick_font,
+            showgrid=True,
+            zeroline=True,
+            linecolor='black'
+        ),
+        margin=dict(t=0, b=0, r=0, l=0),
+        height=500,
+        hovermode='closest',
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=1,
+            xanchor="right",
+            x=1,
+            groupclick="toggleitem",
+            borderwidth=1,
+            font=legend_font,
+            bgcolor='rgba(240, 240, 240, 0.5)',
+        ),
+        plot_bgcolor=background_color,
+    )
+    add_watermark(fig)
+    st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
+
+def sensitivity_plot(sensors_config, condition, df_dct, sensor_colors, site_symbols):
+    sensors_config = {k: v for k, v in sensors_config.items() if k in df_dct}
+    bands, _ = get_bands(sensors_config)
+    st.markdown("<h2 style='text-align: center;'>Sensitivity Analysis</h2>", unsafe_allow_html=True)
+    col1, col2 = st.columns(2)
+    with col1:
+        metric_1 = st.selectbox("Select the x axis", 
+                                ["VZA", "VAA", "SZA", "SAA",
+                                 "P", "T", "WV", "O3", "AOD", "Ang"] +
+                                [f"Ratio {b}" for b in bands] + 
+                                [f"Sensor Reflectance {b}" for b in bands] + 
+                                [f"RadCalNet Reflectance {b}" for b in bands],
+                                index=0)
+    with col2:
+        metric_2 = st.selectbox("Select the y axis", 
+                                ["VZA", "VAA", "SZA", "SAA",
+                                 "P", "T", "WV", "O3", "AOD", "Ang"] +
+                                [f"Ratio {b}" for b in bands] + 
+                                [f"Sensor Reflectance {b}" for b in bands] + 
+                                [f"RadCalNet Reflectance {b}" for b in bands],
+                                index=10)
+    
+    fig = go.Figure()
+
+    for sensor, site_dct in df_dct.items():
+        for site, df in site_dct.items():
+            label1 = get_label(metric_1, sensors_config, sensor)
+            label2 = get_label(metric_2, sensors_config, sensor)
+            if not label1: continue
+            if not label2: continue
+
+            fig.add_trace(go.Scatter(
+                x=df[label1],
+                y=df[label2],
+                mode='markers',
+                name=f"{sensor} @ {site}",
+                marker=dict(
+                    size=15,
+                    color=sensor_colors.get(sensor, "#1f77b4"),
+                    symbol=site_symbols.get(site, "circle"),
+                    line=dict(color='gold', width=1)
+                ),
+                opacity=1.0,
+                customdata=df[[
+                    'date',
+                    'sens_id',
+                    'P', 'T', 'WV', 'O3', 'AOD', 'Ang', 'VZA'
+                ]],
+                hovertemplate=(
+                    "<b>Date:</b> %{customdata[0]|%Y-%m-%d}<br>"
+                    "<b>ID:</b> %{customdata[1]}<br>" +
+                    "<b>P:</b> %{customdata[2]:.2f}<br>" +
+                    "<b>T:</b> %{customdata[3]:.2f}<br>" +
+                    "<b>WV:</b> %{customdata[4]:.2f}<br>" +
+                    "<b>O₃:</b> %{customdata[5]:.2f}<br>" +
+                    "<b>AOD:</b> %{customdata[6]:.2f}<br>" +
+                    "<b>Ångström:</b> %{customdata[7]:.2f}<br>" +
+                    "<b>View Angle:</b> %{customdata[8]:.2f}<br>"
+                ),
+                legendgroup=f"sensor_{sensor}",
+                showlegend=True
+            ))
+
+    if 'Ratio' in metric_2:
+        fig.add_shape(
+            type='line',
+            x0=0, x1=1, xref='x domain',
+            y0=1, y1=1, yref='y1',
+            line=dict(color='red', dash='dash')
+        )
+    
+    fig.update_layout(
+        xaxis=dict(
+            title=dict(text=f'{metric_1}', font=axis_font),
+            tickfont=tick_font,
+            showgrid=True,
+            zeroline=True,
+            linecolor='black',
+        ),
+        yaxis=dict(
+            title=dict(text=f'{metric_2}', font=axis_font),
+            tickfont=tick_font,
+            showgrid=True,
+            zeroline=True,
+            linecolor='black'
+        ),
+        margin=dict(t=0, b=0, r=0, l=0),
+        height=1000,
+        hovermode='closest',
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=1,
+            xanchor="right",
+            x=1,
+            groupclick="toggleitem",
+            borderwidth=1,
+            font=legend_font,
+            bgcolor='rgba(240, 240, 240, 0.5)',
+        ),
+        plot_bgcolor=background_color,
+    )
+    add_watermark(fig)
+    st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
+
+def get_label(metric_str, sensors_config, sensor):
+    mapping = {
+        "Ratio ": "ratio",
+        "Sensor Reflectance ": "sens_refl",
+        "RadCalNet Reflectance ": "rcn_refl",
+    }
+
+    for prefix, metric in mapping.items():
+        if metric_str.startswith(prefix):
+            band = metric_str.replace(prefix, "")
+            return next(
+                (
+                    f"{metric}_{bid}_{b['name']}_{b['cw']}nm"
+                    for bid, b in sensors_config[sensor]['bands'].items()
+                    if b['name'] == band
+                ),
+                None
+            )
+    return metric_str
 
 def get_bands(sensors_config):
     cmap = create_wavelength_cmap()
@@ -702,3 +926,40 @@ def get_plot_style(df_dct):
             site_symbols[site] = symbol_keys[symbol_labels.index(choice)]
 
     return sensor_colors, site_symbols
+
+def add_combined_sites(band, stat_dct):
+    for instrument in stat_dct:
+        site_data = stat_dct[instrument]
+        all_sites = list(site_data.keys())
+        for time_metric in ['yearly', 'monthly']:
+            all_dfs = []
+            for site in all_sites:
+                df = site_data[site][band].get(time_metric)
+                if df is not None:
+                    df = df.copy()
+                    df["site"] = site
+                    all_dfs.append(df)
+            if not all_dfs: continue
+            df_all = pd.concat(all_dfs)
+            group_col = "year" if time_metric == "yearly" else "month"
+            pooled_rows = []
+            for time_val, group in df_all.groupby(group_col):
+                means = group["mean"].values
+                stds = group["std"].values
+                counts = group["count"].values
+                total_n = np.sum(counts)
+                pooled_mean = np.sum(counts * means) / total_n
+                within_var = np.sum((counts - 1) * stds**2)
+                between_var = np.sum(counts * (means - pooled_mean)**2)
+                pooled_std = np.sqrt((within_var + between_var) / (total_n - 1))
+                pooled_rows.append({
+                    group_col: time_val,
+                    "mean": pooled_mean,
+                    "std": pooled_std,
+                    "count": total_n})
+            pooled_df = pd.DataFrame(pooled_rows)
+            if "combined sites" not in stat_dct[instrument]: 
+                stat_dct[instrument]["combined sites"] = {}
+                stat_dct[instrument]["combined sites"][band] = {}
+            stat_dct[instrument]["combined sites"][band][time_metric] = pooled_df    
+    return stat_dct
